@@ -1,15 +1,14 @@
 import datetime
+import os
 import platform
 import sys
 
 
 def get_current_datetime() -> str:
-    """Get the current date and time."""
     return datetime.datetime.now().isoformat()
 
 
 def get_python_info() -> dict[str, str]:
-    """Get information about the current Python environment."""
     return {
         "version": sys.version,
         "platform": platform.system(),
@@ -18,12 +17,6 @@ def get_python_info() -> dict[str, str]:
 
 
 def calculate(expression: str) -> str:
-    """
-    Safely evaluate a mathematical expression.
-
-    Args:
-        expression: A mathematical expression string, e.g. '2 + 2' or '10 * 5'
-    """
     allowed = set("0123456789+-*/.() ")
     if not all(c in allowed for c in expression):
         return "Error: invalid characters in expression"
@@ -32,3 +25,26 @@ def calculate(expression: str) -> str:
         return str(result)
     except Exception as e:
         return f"Error: {e}"
+
+
+def read_local_file(file_path: str) -> str:
+    """
+    Read the contents of a local file.
+    
+    Args:
+        file_path: Absolute or relative path to the file.
+    """
+    try:
+        path = os.path.expanduser(file_path)
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        if not content.strip():
+            return f"Error: file is empty — {file_path}"
+        # Limita a 3000 chars para não explodir o context
+        if len(content) > 3000:
+            return content[:3000] + "\n\n[... file truncated at 3000 chars ...]"
+        return content
+    except FileNotFoundError:
+        return f"Error: file not found — {file_path}"
+    except Exception as e:
+        return f"Error reading file: {e}"
