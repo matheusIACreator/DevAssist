@@ -1,15 +1,14 @@
 """
 DevAssist CLI
 
-Interface interativa que arranca o MCP server automaticamente.
+Interface interativa com MCP via stdio + Firecrawl integration.
 """
 
 from __future__ import annotations
 
 import asyncio
-import subprocess
+import os
 import sys
-import time
 from dataclasses import dataclass
 
 import httpx
@@ -22,7 +21,7 @@ from rich.rule import Rule
 from rich.text import Text
 
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.mcp import MCPServerStreamableHTTP
+from pydantic_ai.mcp import MCPServerStdio
 
 from devassist.models import GitHubRepo, SearchResult
 from devassist.tools import calculate, get_current_datetime, get_python_info, read_local_file
@@ -31,12 +30,20 @@ load_dotenv()
 
 console = Console()
 
-MCP_URL = "http://127.0.0.1:8000/mcp"
-MCP_HEALTH_URL = "http://127.0.0.1:8000"
 
+# --- MCP Servers ---
+mcp_devassist = MCPServerStdio(
+    sys.executable,
+    args=["-m", "devassist.mcpserver", "stdio"],
+    timeout=15,
+)
 
-# --- MCP Server ---
-mcp_server = MCPServerStreamableHTTP(MCP_URL)
+mcp_firecrawl = MCPServerStdio(
+    "npx",
+    args=["-y", "firecrawl-mcp"],
+    env={**os.environ, "FIRECRAWL_API_KEY": os.getenv("FIRECRAWL_API_KEY", "")},
+    timeout=30,
+)
 
 
 # --- Deps ---
@@ -50,10 +57,12 @@ class AgentDeps:
 agent = Agent(
     model="openai:gpt-4o-mini",
     deps_type=AgentDeps,
-    toolsets=[mcp_server],
+    toolsets=[mcp_devassist, mcp_firecrawl],
     instructions=(
         "You are DevAssist, an AI agent for developer productivity. "
         "Answer technical questions clearly. Use tools when relevant. "
+        "For web research and scraping full page content, prefer firecrawl tools. "
+        "For quick searches use web_search. "
         "Format code blocks with markdown when showing code."
     ),
 )
@@ -142,41 +151,6 @@ async def github_search(
         return []
 
 
-# --- MCP Server lifecycle ---
-def start_mcp_server() -> subprocess.Popen:
-    """Arranca o MCP server como subprocess em background."""
-    process = subprocess.Popen(
-        [sys.executable, "-m", "devassist.mcpserver"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    return process
-
-
-def wait_for_mcp_server(timeout: int = 15) -> bool:
-    """Aguarda o MCP server ficar disponível."""
-    import urllib.request
-    import urllib.error
-
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            urllib.request.urlopen(
-                urllib.request.Request(
-                    MCP_URL,
-                    method="POST",
-                    headers={"Content-Type": "application/json"},
-                    data=b"{}",
-                ),
-                timeout=1,
-            )
-        except urllib.error.HTTPError:
-            # Qualquer resposta HTTP (mesmo erro 4xx) significa que o server está up
-            return True
-        except Exception:
-            time.sleep(0.3)
-    return False
-
 # --- UI helpers ---
 def print_welcome() -> None:
     console.print(Panel(
@@ -244,24 +218,7 @@ async def run_cli() -> None:
 
 
 def main() -> None:
-    # Arranca o MCP server em background
-    with console.status("[dim]Starting MCP server...[/dim]", spinner="dots"):
-        mcp_process = start_mcp_server()
-        ready = wait_for_mcp_server(timeout=10)
-
-    if not ready:
-        console.print("[red]Failed to start MCP server. Exiting.[/red]")
-        mcp_process.terminate()
-        sys.exit(1)
-
-    console.print("[dim]MCP server ready.[/dim]\n")
-
-    try:
-        asyncio.run(run_cli())
-    finally:
-        # Garante que o server é terminado ao sair
-        mcp_process.terminate()
-        mcp_process.wait()
+    asyncio.run(run_cli())
 
 
 if __name__ == "__main__":

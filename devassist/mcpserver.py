@@ -153,5 +153,5 @@ def generate_readme_template(project_name: str, description: str, language: str)
 """
 if __name__ == "__main__":
     import sys
-    transport = sys.argv[1] if len(sys.argv) > 1 else "streamable-http"
+    transport = sys.argv[1] if len(sys.argv) > 1 else "stdio"
     mcp.run(transport=transport)
