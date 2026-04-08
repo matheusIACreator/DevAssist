@@ -84,7 +84,7 @@ User input (CLI)
 ### Installation
 
 ```bash
-git clone https://github.com/MatheusM0/devassist
+git clone [https://github.com/MatheusM0/devassist](https://github.com/matheusIACreator/DevAssist.git)
 cd devassist
 
 python -m venv .venv
